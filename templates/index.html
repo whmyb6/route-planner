@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>路径规划</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #fce4ec 0%, #fff3e0 50%, #f3e5f5 100%);
+            min-height: 100vh; padding: 2rem 1rem;
+        }
+        .container {
+            max-width: 1100px; margin: 0 auto;
+            background: rgba(255,255,255,0.95); border-radius: 16px;
+            padding: 2rem; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        h1 { margin-bottom: 0.5rem; color: #333; }
+        .back-link { display: inline-block; margin-bottom: 1rem; color: #1e88e5; text-decoration: none; font-size: 0.9rem; }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .tab-btn {
+            padding: 0.5rem 1.5rem; border-radius: 20px; border: 1px solid #ddd;
+            cursor: pointer; font-size: 0.9rem; background: white; color: #666; transition: all 0.2s;
+        }
+        .tab-btn.active { background: #e74c3c; color: white; border-color: #e74c3c; }
+        .tab-btn:hover:not(.active) { background: #f5f5f5; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .map-controls {
+            display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1rem;
+            align-items: flex-end;
+        }
+        .map-controls .field {
+            display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 180px;
+        }
+        .map-controls .field label { font-size: 0.8rem; color: #888; }
+        .map-controls .field input {
+            padding: 0.4rem 0.6rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem;
+        }
+        .map-controls .field select {
+            padding: 0.4rem 0.6rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem;
+        }
+        .btn {
+            background: #e74c3c; color: white; border: none; padding: 0.5rem 1.2rem;
+            border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: bold; white-space: nowrap;
+        }
+        .btn:hover { background: #c62828; }
+        .btn-secondary { background: #1e88e5; }
+        .btn-secondary:hover { background: #1565c0; }
+        .btn-outline { background: white; color: #666; border: 1px solid #ddd; }
+        .btn-outline:hover { background: #f5f5f5; }
+        #map {
+            height: 500px; border-radius: 12px; border: 1px solid #ddd;
+            margin-bottom: 1rem; z-index: 1;
+        }
+        .route-info {
+            display: flex; gap: 2rem; padding: 1rem; background: #f5f5f5;
+            border-radius: 10px; margin-bottom: 1rem; font-size: 0.9rem; flex-wrap: wrap;
+        }
+        .route-info .info-item { color: #666; }
+        .route-info .info-item span { color: #333; font-weight: bold; }
+        .grid-controls {
+            display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; align-items: center;
+        }
+        .grid-controls label {
+            display: flex; align-items: center; gap: 0.4rem; color: #555; font-size: 0.9rem;
+        }
+        .grid-controls input, .grid-controls select {
+            padding: 0.3rem 0.5rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem;
+        }
+        #grid-container { overflow-x: auto; margin-bottom: 1rem; }
+        #grid { display: grid; gap: 2px; margin: 0 auto; }
+        .cell {
+            width: 30px; height: 30px; border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; cursor: pointer; transition: all 0.2s;
+            background: #e8f5e9; border: 1px solid #c8e6c9;
+        }
+        .cell.start { background: #4caf50; color: white; font-weight: bold; }
+        .cell.goal { background: #f44336; color: white; font-weight: bold; }
+        .cell.obstacle { background: #424242; border-color: #333; }
+        .cell.path { background: #64b5f6; border-color: #1e88e5; animation: pulse 0.5s; }
+        .cell:hover { transform: scale(1.1); z-index: 1; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        #stats {
+            display: flex; gap: 2rem; padding: 1rem; background: #f5f5f5;
+            border-radius: 10px; margin-bottom: 1rem; font-size: 0.9rem; flex-wrap: wrap;
+        }
+        #stats .stat { color: #666; }
+        #stats .stat span { color: #333; font-weight: bold; }
+        .legend { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: 0.85rem; color: #666; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+        .legend-dot { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+        .loading { text-align: center; color: #888; padding: 1rem; }
+        @media (max-width: 600px) {
+            .container { padding: 1rem; }
+            .map-controls { flex-direction: column; }
+            .map-controls .field { min-width: auto; }
+            #map { height: 350px; }
+            .cell { width: 24px; height: 24px; font-size: 8px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <a href="/" class="back-link">← 返回主页</a>
+    <h1>🗺 路径规划</h1>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="map">📍 真实地图</button>
+        <button class="tab-btn" data-tab="grid">🧩 网格寻路</button>
+    </div>
+
+    <!-- 真实地图模式 -->
+    <div class="tab-content active" id="tab-map">
+        <div class="map-controls">
+            <div class="field">
+                <label>起点地址</label>
+                <input type="text" id="originAddr" placeholder="如：北京天安门" value="北京天安门">
+            </div>
+            <div class="field">
+                <label>终点地址</label>
+                <input type="text" id="destAddr" placeholder="如：上海东方明珠" value="上海东方明珠">
+            </div>
+            <div class="field" style="flex:0.6; min-width:100px;">
+                <label>交通方式</label>
+                <select id="travelMode">
+                    <option value="driving">🚗 驾车</option>
+                    <option value="walking">🚶 步行</option>
+                    <option value="cycling">🚲 骑行</option>
+                </select>
+            </div>
+            <button class="btn" id="planRouteBtn">🚀 规划路线</button>
+            <button class="btn btn-outline" id="clearMapBtn">🗑 清除</button>
+        </div>
+        <div id="map"></div>
+        <div class="route-info" id="routeInfo" style="display:none;">
+            <div class="info-item">距离: <span id="routeDist">-</span></div>
+            <div class="info-item">预计用时: <span id="routeDuration">-</span></div>
+            <div class="info-item">起点: <span id="routeOrigin">-</span></div>
+            <div class="info-item">终点: <span id="routeDest">-</span></div>
+        </div>
+        <div class="legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#4caf50;border-radius:50%"></span> 起点</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#f44336;border-radius:50%"></span> 终点</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#1e88e5;border-radius:50%"></span> 路线</div>
+        </div>
+    </div>
+
+    <!-- 网格寻路模式 -->
+    <div class="tab-content" id="tab-grid">
+        <div class="legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#4caf50"></span> 起点</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#f44336"></span> 终点</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#424242"></span> 障碍物</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#64b5f6"></span> 路径</div>
+        </div>
+        <div class="grid-controls">
+            <label>算法:
+                <select id="algorithm">
+                    <option value="astar">A*</option>
+                    <option value="bfs">BFS</option>
+                    <option value="dfs">DFS</option>
+                </select>
+            </label>
+            <label>宽度: <input type="number" id="width" value="15" min="5" max="40"></label>
+            <label>高度: <input type="number" id="height" value="10" min="5" max="40"></label>
+            <button class="btn" id="planGridBtn">🚀 寻路</button>
+            <button class="btn btn-secondary" id="clearGridBtn">🗑 清除</button>
+        </div>
+        <div id="grid-container">
+            <div id="grid"></div>
+        </div>
+        <div id="stats">
+            <div class="stat">路径长度: <span id="pathLen">-</span></div>
+            <div class="stat">原始长度: <span id="rawLen">-</span></div>
+            <div class="stat">算法: <span id="algoName">A*</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========== 标签切换 ==========
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab === 'map') setTimeout(() => map.invalidateSize(), 100);
+    });
+});
+
+// ========== 真实地图 (Leaflet + ArcGIS 瓦片 + 后端API) ==========
+let map = L.map('map').setView([35.9, 116.4], 5);
+
+// ArcGIS 瓦片（国内可访问）
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri, HERE, Garmin, FAO, NOAA',
+    maxZoom: 18,
+    subdomains: []
+}).addTo(map);
+
+let routeLayer = null;
+let startMarker = null;
+let endMarker = null;
+
+function clearMapRoute() {
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
+    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+    document.getElementById('routeInfo').style.display = 'none';
+}
+
+async function geocodeAddress(addr) {
+    const resp = await fetch(`/api/map/geocode?address=${encodeURIComponent(addr)}`);
+    const data = await resp.json();
+    if (data.success && data.data) {
+        return data.data;
+    }
+    return null;
+}
+
+async function planRealRoute() {
+    const origin = document.getElementById('originAddr').value.trim();
+    const dest = document.getElementById('destAddr').value.trim();
+    const mode = document.getElementById('travelMode').value;
+
+    if (!origin || !dest) {
+        alert('请输入起点和终点地址！');
+        return;
+    }
+
+    clearMapRoute();
+    document.getElementById('routeInfo').style.display = 'none';
+
+    // 地理编码
+    const originGeo = await geocodeAddress(origin);
+    const destGeo = await geocodeAddress(dest);
+
+    if (!originGeo) { alert('未找到起点地址：' + origin); return; }
+    if (!destGeo) { alert('未找到终点地址：' + dest); return; }
+
+    const oLng = originGeo.lng || originGeo.lon;
+    const oLat = originGeo.lat;
+    const dLng = destGeo.lng || destGeo.lon;
+    const dLat = destGeo.lat;
+
+    // 标记起点终点
+    startMarker = L.marker([oLat, oLng], {
+        icon: L.divIcon({ className: 'marker-start', html: '<div style="background:#4caf50;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>', iconSize: [24, 24], iconAnchor: [12, 12] })
+    }).addTo(map).bindPopup('起点: ' + origin);
+
+    endMarker = L.marker([dLat, dLng], {
+        icon: L.divIcon({ className: 'marker-end', html: '<div style="background:#f44336;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>', iconSize: [24, 24], iconAnchor: [12, 12] })
+    }).addTo(map).bindPopup('终点: ' + dest);
+
+    // 调用后端路径规划
+    const originCoord = `${oLng},${oLat}`;
+    const destCoord = `${dLng},${dLat}`;
+    const resp = await fetch(`/api/map/plan?origin=${encodeURIComponent(originCoord)}&destination=${encodeURIComponent(destCoord)}&mode=${mode}`);
+    const data = await resp.json();
+
+    if (!data.success) {
+        alert('路线规划失败：' + (data.error || '未知错误'));
+        return;
+    }
+
+    const route = data.data;
+    const polyline = route.polyline || [];
+
+    if (polyline.length > 0) {
+        const latlngs = polyline.map(p => [p[1], p[0]]);
+        routeLayer = L.polyline(latlngs, {
+            color: '#1e88e5', weight: 5, opacity: 0.8,
+            dashArray: null
+        }).addTo(map);
+
+        map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+    }
+
+    // 显示信息
+    document.getElementById('routeDist').textContent = (route.distance_km || 0).toFixed(1) + ' km';
+    const durMin = route.duration_min || 0;
+    const hours = Math.floor(durMin / 60);
+    const mins = Math.round(durMin % 60);
+    document.getElementById('routeDuration').textContent = hours > 0 ? `${hours}小时${mins}分` : `${mins}分钟`;
+    document.getElementById('routeOrigin').textContent = origin;
+    document.getElementById('routeDest').textContent = dest;
+    document.getElementById('routeInfo').style.display = 'flex';
+}
+
+document.getElementById('planRouteBtn').addEventListener('click', planRealRoute);
+document.getElementById('clearMapBtn').addEventListener('click', clearMapRoute);
+
+document.querySelectorAll('#originAddr, #destAddr, #travelMode').forEach(el => {
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') planRealRoute(); });
+});
+
+// ========== 网格寻路 ==========
+let gridData = { width: 15, height: 10, start: [1, 1], goal: [13, 8], obstacles: new Set() };
+
+function createGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = `repeat(${gridData.width}, 1fr)`;
+
+    for (let y = 0; y < gridData.height; y++) {
+        for (let x = 0; x < gridData.width; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.x = x;
+            cell.dataset.y = y;
+
+            if (x === gridData.start[0] && y === gridData.start[1]) {
+                cell.classList.add('start'); cell.textContent = 'S';
+            } else if (x === gridData.goal[0] && y === gridData.goal[1]) {
+                cell.classList.add('goal'); cell.textContent = 'E';
+            } else if (gridData.obstacles.has(`${x},${y}`)) {
+                cell.classList.add('obstacle');
+            }
+
+            cell.addEventListener('click', () => {
+                const key = `${x},${y}`;
+                if (cell.classList.contains('start')) {
+                    cell.classList.remove('start'); cell.textContent = '';
+                    cell.classList.add('goal'); cell.textContent = 'E';
+                    gridData.start = [-1, -1];
+                    gridData.goal = [x, y];
+                } else if (cell.classList.contains('goal')) {
+                    cell.classList.remove('goal'); cell.textContent = '';
+                    cell.classList.add('start'); cell.textContent = 'S';
+                    gridData.goal = [-1, -1];
+                    gridData.start = [x, y];
+                } else if (cell.classList.contains('obstacle')) {
+                    cell.classList.remove('obstacle');
+                    gridData.obstacles.delete(key);
+                } else {
+                    cell.classList.add('obstacle');
+                    gridData.obstacles.add(key);
+                }
+            });
+
+            grid.appendChild(cell);
+        }
+    }
+
+    if (gridData.start[0] < 0) {
+        const firstCell = grid.querySelector('.cell:not(.goal):not(.obstacle)');
+        if (firstCell) {
+            const sx = parseInt(firstCell.dataset.x);
+            const sy = parseInt(firstCell.dataset.y);
+            firstCell.classList.add('start'); firstCell.textContent = 'S';
+            gridData.start = [sx, sy];
+        }
+    }
+}
+
+async function planGrid() {
+    const w = parseInt(document.getElementById('width').value);
+    const h = parseInt(document.getElementById('height').value);
+    const algo = document.getElementById('algorithm').value;
+
+    gridData.width = w;
+    gridData.height = h;
+
+    const obsStr = Array.from(gridData.obstacles).join(';');
+
+    const url = `/api/plan?algorithm=${algo}&width=${w}&height=${h}&start_x=${gridData.start[0]}&start_y=${gridData.start[1]}&goal_x=${gridData.goal[0]}&goal_y=${gridData.goal[1]}&obstacles=${encodeURIComponent(obsStr)}&simplify=true`;
+
+    try {
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        document.getElementById('algoName').textContent =
+            document.getElementById('algorithm').options[document.getElementById('algorithm').selectedIndex].text;
+
+        document.querySelectorAll('.cell.path').forEach(c => {
+            c.classList.remove('path');
+            c.textContent = '';
+        });
+
+        if (data.success) {
+            document.getElementById('pathLen').textContent = data.path_length;
+            document.getElementById('rawLen').textContent = data.raw_length;
+
+            data.path.forEach(([x, y], i) => {
+                const idx = y * w + x;
+                const cell = document.querySelectorAll('.cell')[idx];
+                if (cell && !cell.classList.contains('start') && !cell.classList.contains('goal')) {
+                    cell.classList.add('path');
+                    cell.textContent = i + 1;
+                }
+            });
+        } else {
+            alert('⚠️ ' + (data.error || '无法找到路径'));
+            document.getElementById('pathLen').textContent = '-';
+            document.getElementById('rawLen').textContent = '-';
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    createGrid();
+    document.getElementById('planGridBtn').addEventListener('click', planGrid);
+    document.getElementById('clearGridBtn').addEventListener('click', () => {
+        document.querySelectorAll('.cell.path').forEach(c => {
+            c.classList.remove('path'); c.textContent = '';
+        });
+        document.getElementById('pathLen').textContent = '-';
+        document.getElementById('rawLen').textContent = '-';
+    });
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && document.getElementById('tab-map').classList.contains('active')) {
+        planRealRoute();
+    }
+});
+</script>
+</body>
+</html>
